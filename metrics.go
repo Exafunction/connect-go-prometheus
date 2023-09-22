@@ -1,6 +1,7 @@
 package connect_go_prometheus
 
 import (
+	"google.golang.org/protobuf/proto"
 	prom "github.com/prometheus/client_golang/prometheus"
 )
 
@@ -201,27 +202,39 @@ func (m *Metrics) Collect(c chan<- prom.Metric) {
 	m.streamMsgReceived.Collect(c)
 }
 
-func (m *Metrics) ReportStarted(callType, service, method string) {
+func (m *Metrics) ReportStarted(callType, service, method string, message any) {
 	m.requestStarted.WithLabelValues(callType, service, method).Inc()
 	var streamMsg *prom.CounterVec
+	var bytes *prom.CounterVec
 	if m.isClient {
 		streamMsg = m.streamMsgSent
+		bytes = m.bytesSent
 	} else {
 		streamMsg = m.streamMsgReceived
+		bytes = m.bytesReceived
 	}
 	streamMsg.WithLabelValues(callType, service, method).Inc()
+	if bytes != nil {
+		bytes.WithLabelValues(callType, service, method).Add(float64(proto.Size(message.(proto.Message))))
+	}
 }
 
-func (m *Metrics) ReportHandled(callType, service, method, code string) {
+func (m *Metrics) ReportHandled(callType, service, method, code string, message any) {
 	m.requestHandled.WithLabelValues(callType, service, method, code).Inc()
 	if code == CodeOk {
 		var streamMsg *prom.CounterVec
+		var bytes *prom.CounterVec
 		if m.isClient {
 			streamMsg = m.streamMsgReceived
+			bytes = m.bytesReceived
 		} else {
 			streamMsg = m.streamMsgSent
+			bytes = m.bytesSent
 		}
 		streamMsg.WithLabelValues(callType, service, method).Inc()
+		if bytes != nil {
+			bytes.WithLabelValues(callType, service, method).Add(float64(proto.Size(message.(proto.Message))))
+		}
 	}
 }
 
