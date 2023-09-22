@@ -21,6 +21,7 @@ var (
 		WithSubsystem("subsystem"),
 		WithConstLabels(prom.Labels{"component": "foo"}),
 		WithHistogramBuckets([]float64{1, 5}),
+		WithByteMetrics(true),
 	}
 )
 
