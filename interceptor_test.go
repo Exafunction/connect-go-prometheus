@@ -40,7 +40,7 @@ func TestInterceptor_WithClient_WithServer_Histogram(t *testing.T) {
 
 	client := greetconnect.NewGreetServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(interceptor))
 	_, err := client.Greet(context.Background(), connect.NewRequest(&greet.GreetRequest{
-		Name: "elza",
+		Name: "eliza",
 	}))
 	require.Error(t, err)
 	require.Equal(t, connect.CodeOf(err), connect.CodeUnimplemented)
@@ -67,7 +67,7 @@ func TestInterceptor_Default(t *testing.T) {
 
 	client := greetconnect.NewGreetServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(interceptor))
 	_, err := client.Greet(context.Background(), connect.NewRequest(&greet.GreetRequest{
-		Name: "elza",
+		Name: "eliza",
 	}))
 	require.Error(t, err)
 	require.Equal(t, connect.CodeOf(err), connect.CodeUnimplemented)
@@ -96,7 +96,7 @@ func TestInterceptor_WithClientMetrics(t *testing.T) {
 
 	client := greetconnect.NewGreetServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(interceptor))
 	_, err := client.Greet(context.Background(), connect.NewRequest(&greet.GreetRequest{
-		Name: "elza",
+		Name: "eliza",
 	}))
 	require.Error(t, err)
 	require.Equal(t, connect.CodeOf(err), connect.CodeUnimplemented)
@@ -127,7 +127,7 @@ func TestInterceptor_WithServerMetrics(t *testing.T) {
 
 	client := greetconnect.NewGreetServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(interceptor))
 	_, err := client.Greet(context.Background(), connect.NewRequest(&greet.GreetRequest{
-		Name: "elza",
+		Name: "eliza",
 	}))
 	require.Error(t, err)
 	require.Equal(t, connect.CodeOf(err), connect.CodeUnimplemented)
