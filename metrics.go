@@ -24,6 +24,8 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		requestHandledSecondsName: "connect_server_handled_seconds",
 		streamMsgSentName:         "connect_server_msg_sent_total",
 		streamMsgReceivedName:     "connect_server_msg_received_total",
+		bytesSentName:             "connect_server_bytes_sent_total",
+		bytesReceivedName:         "connect_server_bytes_received_total",
 	}, opts...)
 
 	m := &Metrics{
@@ -69,6 +71,23 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		}, []string{"type", "service", "method", "code"})
 	}
 
+	if config.withByteMetrics {
+		m.bytesSent = prom.NewCounterVec(prom.CounterOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.bytesSentName,
+			Help:        "Total number of bytes sent by server-side",
+		}, []string{"type", "service", "method"})
+		m.bytesReceived = prom.NewCounterVec(prom.CounterOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.bytesReceivedName,
+			Help:        "Total number of bytes received by server-side",
+		}, []string{"type", "service", "method"})
+	}
+
 	return m
 }
 
@@ -80,6 +99,8 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 		requestHandledSecondsName: "connect_client_handled_seconds",
 		streamMsgSentName:         "connect_client_msg_sent_total",
 		streamMsgReceivedName:     "connect_client_msg_recieved_total",
+		bytesSentName:             "connect_client_bytes_sent_total",
+		bytesReceivedName:         "connect_client_bytes_received_total",
 	}, opts...)
 
 	m := &Metrics{
@@ -125,6 +146,23 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 		}, []string{"type", "service", "method", "code"})
 	}
 
+	if config.withByteMetrics {
+		m.bytesSent = prom.NewCounterVec(prom.CounterOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.bytesSentName,
+			Help:        "Total number of bytes sent by client-side",
+		}, []string{"type", "service", "method"})
+		m.bytesReceived = prom.NewCounterVec(prom.CounterOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.bytesReceivedName,
+			Help:        "Total number of bytes received by client-side",
+		}, []string{"type", "service", "method"})
+	}
+
 	return m
 }
 
@@ -137,6 +175,8 @@ type Metrics struct {
 	requestHandledSeconds *prom.HistogramVec
 	streamMsgSent         *prom.CounterVec
 	streamMsgReceived     *prom.CounterVec
+	bytesSent             *prom.CounterVec
+	bytesReceived         *prom.CounterVec
 }
 
 // Describe implements Describe as required by prom.Collector
@@ -203,8 +243,12 @@ type metricsOptions struct {
 	requestHandledSecondsName string
 	streamMsgSentName         string
 	streamMsgReceivedName     string
+	bytesSentName             string
+	bytesReceivedName         string
 
 	constLabels prom.Labels
+
+	withByteMetrics bool
 }
 
 type MetricsOption func(opts *metricsOptions)
@@ -236,6 +280,12 @@ func WithSubsystem(subsystem string) MetricsOption {
 func WithConstLabels(labels prom.Labels) MetricsOption {
 	return func(opts *metricsOptions) {
 		opts.constLabels = labels
+	}
+}
+
+func WithByteMetrics(enabled bool) MetricsOption {
+	return func(opts *metricsOptions) {
+		opts.withByteMetrics = enabled
 	}
 }
 
