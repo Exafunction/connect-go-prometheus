@@ -1,8 +1,8 @@
 package connect_go_prometheus
 
 import (
-	"google.golang.org/protobuf/proto"
 	prom "github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
 )
 
 var (

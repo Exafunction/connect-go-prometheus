@@ -3,6 +3,8 @@ package connect_go_prometheus
 import (
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/bufbuild/connect-go"
 )
 
@@ -25,12 +27,18 @@ func newStreamingConn(spec connect.Spec, reporter *Metrics) streamingConn {
 	return conn
 }
 
-func (conn *streamingConn) reportSend() {
+func (conn *streamingConn) reportSend(message any) {
 	conn.reporter.streamMsgSent.WithLabelValues(conn.callType, conn.service, conn.method).Inc()
+	if conn.reporter.bytesSent != nil {
+		conn.reporter.bytesSent.WithLabelValues(conn.callType, conn.service, conn.method).Add(float64(proto.Size(message.(proto.Message))))
+	}
 }
 
-func (conn *streamingConn) reportReceive() {
+func (conn *streamingConn) reportReceive(message any) {
 	conn.reporter.streamMsgReceived.WithLabelValues(conn.callType, conn.service, conn.method).Inc()
+	if conn.reporter.bytesReceived != nil {
+		conn.reporter.bytesReceived.WithLabelValues(conn.callType, conn.service, conn.method).Add(float64(proto.Size(message.(proto.Message))))
+	}
 }
 
 func (conn *streamingConn) reportHandled(err error) {
@@ -52,14 +60,14 @@ func newStreamingClientConn(conn connect.StreamingClientConn, i *Interceptor) *s
 }
 
 func (conn *streamingClientConn) Send(msg any) error {
-	conn.reportSend()
+	conn.reportSend(msg)
 	return conn.StreamingClientConn.Send(msg)
 }
 
 func (conn *streamingClientConn) Receive(msg any) error {
 	err := conn.StreamingClientConn.Receive(msg)
 	if err == nil {
-		conn.reportReceive()
+		conn.reportReceive(msg)
 	}
 	return err
 }
@@ -85,14 +93,14 @@ func newStreamingHandlerConn(conn connect.StreamingHandlerConn, i *Interceptor) 
 }
 
 func (conn *streamingHandlerConn) Send(msg any) error {
-	conn.reportSend()
+	conn.reportSend(msg)
 	return conn.StreamingHandlerConn.Send(msg)
 }
 
 func (conn *streamingHandlerConn) Receive(msg any) error {
 	err := conn.StreamingHandlerConn.Receive(msg)
 	if err == nil {
-		conn.reportReceive()
+		conn.reportReceive(msg)
 	}
 	return err
 }
