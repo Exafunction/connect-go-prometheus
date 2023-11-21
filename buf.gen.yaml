@@ -1,11 +1,11 @@
 version: v1
 plugins:
-  - name: go
+  - plugin: buf.build/protocolbuffers/go:v1.31.0
     out: gen
     opt:
      - module=github.com/easyCZ/connect-go-prometheus/gen
 
-  - name: connect-go
+  - plugin: buf.build/connectrpc/go:v1.12.0
     out: gen
     opt:
      - module=github.com/easyCZ/connect-go-prometheus/gen
