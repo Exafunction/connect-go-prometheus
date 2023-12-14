@@ -2,10 +2,10 @@ package connect_go_prometheus
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"connectrpc.com/connect"
 )
 
