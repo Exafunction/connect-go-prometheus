@@ -18,7 +18,7 @@ func newStreamingConn(spec connect.Spec, reporter *Metrics) streamingConn {
 	callPackage, callMethod := procedureToPackageAndMethod(spec.Procedure)
 	conn := streamingConn{
 		startTime: time.Now(),
-		callType:  steamTypeString(spec.StreamType),
+		callType:  streamTypeString(spec.StreamType),
 		service:   callPackage,
 		method:    callMethod,
 		reporter:  reporter,
@@ -41,21 +41,17 @@ func (conn *streamingConn) reportReceive(message any) {
 	}
 }
 
-func (conn *streamingConn) reportHandled(err error) {
-	errCode := codeOf(err)
-	conn.reporter.requestHandled.WithLabelValues(conn.callType, conn.service, conn.method, errCode).Inc()
-	conn.reporter.ReportHandledSeconds(conn.callType, conn.service, conn.method, errCode, time.Since(conn.startTime).Seconds())
-}
-
 type streamingClientConn struct {
 	connect.StreamingClientConn
 	streamingConn
+	onClose func(error)
 }
 
-func newStreamingClientConn(conn connect.StreamingClientConn, i *Interceptor) *streamingClientConn {
+func newStreamingClientConn(conn connect.StreamingClientConn, i *Interceptor, onClose func(error)) *streamingClientConn {
 	return &streamingClientConn{
 		StreamingClientConn: conn,
 		streamingConn:       newStreamingConn(conn.Spec(), i.client),
+		onClose:             onClose,
 	}
 }
 
@@ -74,7 +70,7 @@ func (conn *streamingClientConn) Receive(msg any) error {
 
 func (conn *streamingClientConn) CloseResponse() error {
 	err := conn.StreamingClientConn.CloseResponse()
-	conn.reportHandled(err)
+	conn.onClose(err)
 	return err
 }
 

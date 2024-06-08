@@ -5,8 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"connectrpc.com/connect"
+	"github.com/cockroachdb/errors"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -40,7 +42,7 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		}
 
 		now := time.Now()
-		callType := steamTypeString(req.Spec().StreamType)
+		callType := streamTypeString(req.Spec().StreamType)
 		callPackage, callMethod := procedureToPackageAndMethod(req.Spec().Procedure)
 
 		var reporter *Metrics
@@ -50,20 +52,34 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			reporter = i.server
 		}
 
+		var code string
 		if reporter != nil {
-			reporter.ReportStarted(callType, callPackage, callMethod, req.Any())
+			var bytes *prom.CounterVec
+			if reporter.isClient {
+				bytes = reporter.bytesSent
+			} else {
+				bytes = reporter.bytesReceived
+			}
+			if bytes != nil {
+				bytes.WithLabelValues(callType, callPackage, callMethod).Add(float64(proto.Size(req.Any().(proto.Message))))
+			}
+			reporter.ReportStarted(callType, callPackage, callMethod)
+			defer reporter.ReportHandled(callType, callPackage, callMethod, code)
+			defer reporter.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
 		}
 
 		resp, err := next(ctx, req)
-		code := codeOf(err)
-		var respMsg any
+		code = codeOf(err)
 		if err == nil {
-			respMsg = resp.Any()
-		}
-
-		if reporter != nil {
-			reporter.ReportHandled(callType, callPackage, callMethod, code, respMsg)
-			reporter.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
+			var bytes *prom.CounterVec
+			if reporter.isClient {
+				bytes = reporter.bytesSent
+			} else {
+				bytes = reporter.bytesReceived
+			}
+			if bytes != nil {
+				bytes.WithLabelValues(callType, callPackage, callMethod).Add(float64(proto.Size(resp.Any().(proto.Message))))
+			}
 		}
 
 		return resp, err
@@ -71,26 +87,47 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 func (i *Interceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return connect.StreamingClientFunc(func(ctx context.Context, s connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, s)
-		if i.client != nil {
-			conn = newStreamingClientConn(conn, i)
+	return connect.StreamingClientFunc(func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+		// Short-circuit, not configured to report for client.
+		if i.client == nil {
+			return next(ctx, spec)
 		}
-		return conn
+
+		now := time.Now()
+		callType := streamTypeString(spec.StreamType)
+		callPackage, callMethod := procedureToPackageAndMethod(spec.Procedure)
+
+		i.client.ReportStarted(callType, callPackage, callMethod)
+		onClose := func(err error) {
+			code := codeOf(err)
+			i.client.ReportHandled(callType, callPackage, callMethod, code)
+			i.client.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
+		}
+
+		conn := next(ctx, spec)
+		return newStreamingClientConn(conn, i, onClose)
 	})
 }
 
 func (i *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return connect.StreamingHandlerFunc(func(ctx context.Context, shc connect.StreamingHandlerConn) error {
-		var newShc *streamingHandlerConn
-		if i.server != nil {
-			newShc = newStreamingHandlerConn(shc, i)
-			shc = newShc
+		// Short-circuit, not configured to report for server.
+		if i.server == nil {
+			return next(ctx, shc)
 		}
+
+		now := time.Now()
+		callType := streamTypeString(shc.Spec().StreamType)
+		callPackage, callMethod := procedureToPackageAndMethod(shc.Spec().Procedure)
+
+		var code string
+		i.server.ReportStarted(callType, callPackage, callMethod)
+		defer i.server.ReportHandled(callType, callPackage, callMethod, code)
+		defer i.server.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
+
+		shc = newStreamingHandlerConn(shc, i)
 		err := next(ctx, shc)
-		if newShc != nil {
-			newShc.reportHandled(err)
-		}
+		code = codeOf(err)
 		return err
 	})
 }
@@ -104,7 +141,7 @@ func procedureToPackageAndMethod(procedure string) (string, string) {
 	return "unknown", "unknown"
 }
 
-func steamTypeString(st connect.StreamType) string {
+func streamTypeString(st connect.StreamType) string {
 	switch st {
 	case connect.StreamTypeUnary:
 		return "unary"
