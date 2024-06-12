@@ -2,7 +2,6 @@ package connect_go_prometheus
 
 import (
 	prom "github.com/prometheus/client_golang/prometheus"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -27,6 +26,7 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		streamMsgReceivedName:     "connect_server_msg_received_total",
 		bytesSentName:             "connect_server_bytes_sent_total",
 		bytesReceivedName:         "connect_server_bytes_received_total",
+		inflightRequestsName:      "connect_server_inflight_requests",
 	}, opts...)
 
 	m := &Metrics{
@@ -89,6 +89,16 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		}, []string{"type", "service", "method"})
 	}
 
+	if config.withInflightMetrics {
+		m.inflightRequests = prom.NewGaugeVec(prom.GaugeOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.inflightRequestsName,
+			Help:        "Current number of inflight RPCs server-side",
+		}, []string{"type", "service", "method"})
+	}
+
 	return m
 }
 
@@ -99,9 +109,10 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 		requestHandledName:        "connect_client_handled_total",
 		requestHandledSecondsName: "connect_client_handled_seconds",
 		streamMsgSentName:         "connect_client_msg_sent_total",
-		streamMsgReceivedName:     "connect_client_msg_recieved_total",
+		streamMsgReceivedName:     "connect_client_msg_received_total",
 		bytesSentName:             "connect_client_bytes_sent_total",
 		bytesReceivedName:         "connect_client_bytes_received_total",
+		inflightRequestsName:      "connect_client_inflight_requests",
 	}, opts...)
 
 	m := &Metrics{
@@ -164,6 +175,16 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 		}, []string{"type", "service", "method"})
 	}
 
+	if config.withInflightMetrics {
+		m.inflightRequests = prom.NewGaugeVec(prom.GaugeOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.inflightRequestsName,
+			Help:        "Current number of inflight RPCs client-side",
+		}, []string{"type", "service", "method"})
+	}
+
 	return m
 }
 
@@ -178,6 +199,26 @@ type Metrics struct {
 	streamMsgReceived     *prom.CounterVec
 	bytesSent             *prom.CounterVec
 	bytesReceived         *prom.CounterVec
+	inflightRequests      *prom.GaugeVec
+}
+
+func (m *Metrics) Reset() {
+	m.requestStarted.Reset()
+	m.requestHandled.Reset()
+	m.streamMsgSent.Reset()
+	m.streamMsgReceived.Reset()
+	if m.requestHandledSeconds != nil {
+		m.requestHandledSeconds.Reset()
+	}
+	if m.bytesSent != nil {
+		m.bytesSent.Reset()
+	}
+	if m.bytesReceived != nil {
+		m.bytesReceived.Reset()
+	}
+	if m.inflightRequests != nil {
+		m.inflightRequests.Reset()
+	}
 }
 
 // Describe implements Describe as required by prom.Collector
@@ -189,6 +230,15 @@ func (m *Metrics) Describe(c chan<- *prom.Desc) {
 	}
 	m.streamMsgSent.Describe(c)
 	m.streamMsgReceived.Describe(c)
+	if m.bytesSent != nil {
+		m.bytesSent.Describe(c)
+	}
+	if m.bytesReceived != nil {
+		m.bytesReceived.Describe(c)
+	}
+	if m.inflightRequests != nil {
+		m.inflightRequests.Describe(c)
+	}
 }
 
 // Collect implements collect as required by prom.Collector
@@ -200,41 +250,28 @@ func (m *Metrics) Collect(c chan<- prom.Metric) {
 	}
 	m.streamMsgSent.Collect(c)
 	m.streamMsgReceived.Collect(c)
+	if m.bytesSent != nil {
+		m.bytesSent.Collect(c)
+	}
+	if m.bytesReceived != nil {
+		m.bytesReceived.Collect(c)
+	}
+	if m.inflightRequests != nil {
+		m.inflightRequests.Collect(c)
+	}
 }
 
-func (m *Metrics) ReportStarted(callType, service, method string, message any) {
+func (m *Metrics) ReportStarted(callType, service, method string) {
 	m.requestStarted.WithLabelValues(callType, service, method).Inc()
-	var streamMsg *prom.CounterVec
-	var bytes *prom.CounterVec
-	if m.isClient {
-		streamMsg = m.streamMsgSent
-		bytes = m.bytesSent
-	} else {
-		streamMsg = m.streamMsgReceived
-		bytes = m.bytesReceived
-	}
-	streamMsg.WithLabelValues(callType, service, method).Inc()
-	if bytes != nil {
-		bytes.WithLabelValues(callType, service, method).Add(float64(proto.Size(message.(proto.Message))))
+	if m.inflightRequests != nil {
+		m.inflightRequests.WithLabelValues(callType, service, method).Inc()
 	}
 }
 
-func (m *Metrics) ReportHandled(callType, service, method, code string, message any) {
+func (m *Metrics) ReportHandled(callType, service, method, code string) {
 	m.requestHandled.WithLabelValues(callType, service, method, code).Inc()
-	if code == CodeOk {
-		var streamMsg *prom.CounterVec
-		var bytes *prom.CounterVec
-		if m.isClient {
-			streamMsg = m.streamMsgReceived
-			bytes = m.bytesReceived
-		} else {
-			streamMsg = m.streamMsgSent
-			bytes = m.bytesSent
-		}
-		streamMsg.WithLabelValues(callType, service, method).Inc()
-		if bytes != nil {
-			bytes.WithLabelValues(callType, service, method).Add(float64(proto.Size(message.(proto.Message))))
-		}
+	if m.inflightRequests != nil {
+		m.inflightRequests.WithLabelValues(callType, service, method).Dec()
 	}
 }
 
@@ -258,10 +295,12 @@ type metricsOptions struct {
 	streamMsgReceivedName     string
 	bytesSentName             string
 	bytesReceivedName         string
+	inflightRequestsName      string
 
 	constLabels prom.Labels
 
-	withByteMetrics bool
+	withByteMetrics     bool
+	withInflightMetrics bool
 }
 
 type MetricsOption func(opts *metricsOptions)
@@ -299,6 +338,12 @@ func WithConstLabels(labels prom.Labels) MetricsOption {
 func WithByteMetrics(enabled bool) MetricsOption {
 	return func(opts *metricsOptions) {
 		opts.withByteMetrics = enabled
+	}
+}
+
+func WithInflightMetrics(enabled bool) MetricsOption {
+	return func(opts *metricsOptions) {
+		opts.withInflightMetrics = enabled
 	}
 }
 
