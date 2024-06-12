@@ -72,12 +72,12 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 
 		resp, err := next(ctx, req)
 		code = codeOf(err)
-		if err == nil {
+		if err == nil && reporter != nil {
 			var bytes *prom.CounterVec
 			if reporter.isClient {
-				bytes = reporter.bytesSent
-			} else {
 				bytes = reporter.bytesReceived
+			} else {
+				bytes = reporter.bytesSent
 			}
 			if bytes != nil {
 				bytes.WithLabelValues(callType, callPackage, callMethod).Add(float64(proto.Size(resp.Any().(proto.Message))))
