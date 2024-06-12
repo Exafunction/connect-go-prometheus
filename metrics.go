@@ -205,11 +205,11 @@ type Metrics struct {
 func (m *Metrics) Reset() {
 	m.requestStarted.Reset()
 	m.requestHandled.Reset()
-	m.streamMsgSent.Reset()
-	m.streamMsgReceived.Reset()
 	if m.requestHandledSeconds != nil {
 		m.requestHandledSeconds.Reset()
 	}
+	m.streamMsgSent.Reset()
+	m.streamMsgReceived.Reset()
 	if m.bytesSent != nil {
 		m.bytesSent.Reset()
 	}
