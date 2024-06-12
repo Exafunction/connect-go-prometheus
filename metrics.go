@@ -26,6 +26,7 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		streamMsgReceivedName:     "connect_server_msg_received_total",
 		bytesSentName:             "connect_server_bytes_sent_total",
 		bytesReceivedName:         "connect_server_bytes_received_total",
+		inflightRequestsName:      "connect_server_inflight_requests",
 	}, opts...)
 
 	m := &Metrics{
@@ -88,6 +89,16 @@ func NewServerMetrics(opts ...MetricsOption) *Metrics {
 		}, []string{"type", "service", "method"})
 	}
 
+	if config.withInflightMetrics {
+		m.inflightRequests = prom.NewGaugeVec(prom.GaugeOpts{
+			Namespace:   config.namespace,
+			Subsystem:   config.subsystem,
+			ConstLabels: config.constLabels,
+			Name:        config.inflightRequestsName,
+			Help:        "Current number of inflight RPCs server-side",
+		}, []string{"type", "service", "method"})
+	}
+
 	return m
 }
 
@@ -98,9 +109,10 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 		requestHandledName:        "connect_client_handled_total",
 		requestHandledSecondsName: "connect_client_handled_seconds",
 		streamMsgSentName:         "connect_client_msg_sent_total",
-		streamMsgReceivedName:     "connect_client_msg_recieved_total",
+		streamMsgReceivedName:     "connect_client_msg_received_total",
 		bytesSentName:             "connect_client_bytes_sent_total",
 		bytesReceivedName:         "connect_client_bytes_received_total",
+		inflightRequestsName:      "connect_client_inflight_requests",
 	}, opts...)
 
 	m := &Metrics{
@@ -168,8 +180,8 @@ func NewClientMetrics(opts ...MetricsOption) *Metrics {
 			Namespace:   config.namespace,
 			Subsystem:   config.subsystem,
 			ConstLabels: config.constLabels,
-			Name:        "inflight_requests",
-			Help:        "Current number of inflight RPCs",
+			Name:        config.inflightRequestsName,
+			Help:        "Current number of inflight RPCs client-side",
 		}, []string{"type", "service", "method"})
 	}
 
@@ -188,6 +200,25 @@ type Metrics struct {
 	bytesSent             *prom.CounterVec
 	bytesReceived         *prom.CounterVec
 	inflightRequests      *prom.GaugeVec
+}
+
+func (m *Metrics) Reset() {
+	m.requestStarted.Reset()
+	m.requestHandled.Reset()
+	m.streamMsgSent.Reset()
+	m.streamMsgReceived.Reset()
+	if m.requestHandledSeconds != nil {
+		m.requestHandledSeconds.Reset()
+	}
+	if m.bytesSent != nil {
+		m.bytesSent.Reset()
+	}
+	if m.bytesReceived != nil {
+		m.bytesReceived.Reset()
+	}
+	if m.inflightRequests != nil {
+		m.inflightRequests.Reset()
+	}
 }
 
 // Describe implements Describe as required by prom.Collector
@@ -264,6 +295,7 @@ type metricsOptions struct {
 	streamMsgReceivedName     string
 	bytesSentName             string
 	bytesReceivedName         string
+	inflightRequestsName      string
 
 	constLabels prom.Labels
 

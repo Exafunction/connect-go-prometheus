@@ -2,6 +2,7 @@ package connect_go_prometheus
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,8 @@ import (
 var (
 	testMetricOptions = []MetricsOption{
 		WithHistogram(true),
+		WithByteMetrics(true),
+		WithInflightMetrics(true),
 		WithNamespace("namespace"),
 		WithSubsystem("subsystem"),
 		WithConstLabels(prom.Labels{"component": "foo"}),
@@ -41,6 +44,7 @@ func createClientAndStreamRequest(t *testing.T, srv *httptest.Server, intercepto
 		Name: "eliza",
 	}))
 	require.NoError(t, err)
+	defer stream.Close()
 	require.False(t, stream.Receive())
 	err = stream.Err()
 	require.Error(t, err)
@@ -66,16 +70,47 @@ func TestInterceptor_WithClient_WithServer_Histogram(t *testing.T) {
 		"namespace_subsystem_connect_client_handled_seconds",
 		"namespace_subsystem_connect_client_handled_total",
 		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
 
 		"namespace_subsystem_connect_server_handled_seconds",
 		"namespace_subsystem_connect_server_handled_total",
 		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
 	}
 	count, err := testutil.GatherAndCount(reg, expectedMetrics...)
 	require.NoError(t, err)
 	require.Equal(t, len(expectedMetrics), count)
 
+	clientMetrics.Reset()
+	serverMetrics.Reset()
+
 	createClientAndStreamRequest(t, srv, interceptor)
+
+	expectedMetrics = []string{
+		"namespace_subsystem_connect_client_handled_seconds",
+		"namespace_subsystem_connect_client_handled_total",
+		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_msg_sent_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
+
+		"namespace_subsystem_connect_server_handled_seconds",
+		"namespace_subsystem_connect_server_handled_total",
+		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_msg_received_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
+	}
+	metrics, err := reg.Gather()
+	require.NoError(t, err)
+	for _, metric := range metrics {
+		fmt.Printf("%v\n", *metric.Name)
+	}
+	count, err = testutil.GatherAndCount(reg, expectedMetrics...)
+	require.NoError(t, err)
+	require.Equal(t, len(expectedMetrics), count)
 }
 
 func TestInterceptor_Default(t *testing.T) {
@@ -116,16 +151,41 @@ func TestInterceptor_WithClientMetrics(t *testing.T) {
 		"namespace_subsystem_connect_client_handled_seconds",
 		"namespace_subsystem_connect_client_handled_total",
 		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
 
 		"namespace_subsystem_connect_server_handled_seconds",
 		"namespace_subsystem_connect_server_handled_total",
 		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
 	}
 	count, err := testutil.GatherAndCount(reg, possibleMetrics...)
 	require.NoError(t, err)
-	require.Equal(t, 3, count, "must report only 3 metrics, as server side is disabled")
+	require.Equal(t, 5, count, "must report only client-side metrics, as server-side is disabled")
+
+	clientMetrics.Reset()
 
 	createClientAndStreamRequest(t, srv, interceptor)
+
+	possibleMetrics = []string{
+		"namespace_subsystem_connect_client_handled_seconds",
+		"namespace_subsystem_connect_client_handled_total",
+		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_msg_sent_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
+
+		"namespace_subsystem_connect_server_handled_seconds",
+		"namespace_subsystem_connect_server_handled_total",
+		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_msg_received_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
+	}
+	count, err = testutil.GatherAndCount(reg, possibleMetrics...)
+	require.NoError(t, err)
+	require.Equal(t, 6, count, "must report only client-side metrics, as server-side is disabled")
 }
 
 func TestInterceptor_WithServerMetrics(t *testing.T) {
@@ -144,14 +204,39 @@ func TestInterceptor_WithServerMetrics(t *testing.T) {
 		"namespace_subsystem_connect_client_handled_seconds",
 		"namespace_subsystem_connect_client_handled_total",
 		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
 
 		"namespace_subsystem_connect_server_handled_seconds",
 		"namespace_subsystem_connect_server_handled_total",
 		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
 	}
 	count, err := testutil.GatherAndCount(reg, possibleMetrics...)
 	require.NoError(t, err)
-	require.Equal(t, 3, count, "must report only server side metrics, client-side is disabled")
+	require.Equal(t, 5, count, "must report only server-side metrics, client-side is disabled")
+
+	serverMetrics.Reset()
 
 	createClientAndStreamRequest(t, srv, interceptor)
+
+	possibleMetrics = []string{
+		"namespace_subsystem_connect_client_handled_seconds",
+		"namespace_subsystem_connect_client_handled_total",
+		"namespace_subsystem_connect_client_started_total",
+		"namespace_subsystem_connect_client_msg_sent_total",
+		"namespace_subsystem_connect_client_bytes_sent_total",
+		"namespace_subsystem_connect_client_inflight_requests",
+
+		"namespace_subsystem_connect_server_handled_seconds",
+		"namespace_subsystem_connect_server_handled_total",
+		"namespace_subsystem_connect_server_started_total",
+		"namespace_subsystem_connect_server_msg_received_total",
+		"namespace_subsystem_connect_server_bytes_received_total",
+		"namespace_subsystem_connect_server_inflight_requests",
+	}
+	count, err = testutil.GatherAndCount(reg, possibleMetrics...)
+	require.NoError(t, err)
+	require.Equal(t, 6, count, "must report only server-side metrics, client-side is disabled")
 }
