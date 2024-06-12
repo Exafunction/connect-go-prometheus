@@ -64,8 +64,8 @@ func (i *Interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 				bytes.WithLabelValues(callType, callPackage, callMethod).Add(float64(proto.Size(req.Any().(proto.Message))))
 			}
 			reporter.ReportStarted(callType, callPackage, callMethod)
-			defer func() { reporter.ReportHandled(callType, callPackage, callMethod, code) }()
 			defer func() {
+				reporter.ReportHandled(callType, callPackage, callMethod, code)
 				reporter.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
 			}()
 		}
@@ -124,8 +124,8 @@ func (i *Interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) co
 
 		var code string
 		i.server.ReportStarted(callType, callPackage, callMethod)
-		defer func() { i.server.ReportHandled(callType, callPackage, callMethod, code) }()
 		defer func() {
+			i.server.ReportHandled(callType, callPackage, callMethod, code)
 			i.server.ReportHandledSeconds(callType, callPackage, callMethod, code, time.Since(now).Seconds())
 		}()
 
