@@ -2,7 +2,6 @@ package connect_go_prometheus
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -102,11 +101,6 @@ func TestInterceptor_WithClient_WithServer_Histogram(t *testing.T) {
 		"namespace_subsystem_connect_server_msg_received_total",
 		"namespace_subsystem_connect_server_bytes_received_total",
 		"namespace_subsystem_connect_server_inflight_requests",
-	}
-	metrics, err := reg.Gather()
-	require.NoError(t, err)
-	for _, metric := range metrics {
-		fmt.Printf("%v\n", *metric.Name)
 	}
 	count, err = testutil.GatherAndCount(reg, expectedMetrics...)
 	require.NoError(t, err)
